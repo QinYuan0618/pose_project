@@ -61,3 +61,6 @@ Thumbs.db
 runs/
 outputs/
 results/
+
+
+pytorch-openpose/notebooks/
