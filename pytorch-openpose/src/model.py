@@ -31,10 +31,12 @@ class bodypose_model(nn.Module):
                           'Mconv7_stage4_L1', 'Mconv7_stage4_L2', 'Mconv7_stage5_L1',\
                           'Mconv7_stage5_L2', 'Mconv7_stage6_L1', 'Mconv7_stage6_L1']
         blocks = {}
+        # 这部分是VGG-19的特征提取部分吗，约占整个网络的60%参数量
         block0 = OrderedDict([
-                      ('conv1_1', [3, 64, 3, 1, 1]),
+                      # [输入通道, 输出通道, 卷积核大小, 步长, padding]
+                      ('conv1_1', [3, 64, 3, 1, 1]),    # 3输入→64输出，3×3卷积
                       ('conv1_2', [64, 64, 3, 1, 1]),
-                      ('pool1_stage1', [2, 2, 0]),
+                      ('pool1_stage1', [2, 2, 0]),      # 池化，尺寸/2
                       ('conv2_1', [64, 128, 3, 1, 1]),
                       ('conv2_2', [128, 128, 3, 1, 1]),
                       ('pool2_stage1', [2, 2, 0]),
@@ -46,24 +48,24 @@ class bodypose_model(nn.Module):
                       ('conv4_1', [256, 512, 3, 1, 1]),
                       ('conv4_2', [512, 512, 3, 1, 1]),
                       ('conv4_3_CPM', [512, 256, 3, 1, 1]),
-                      ('conv4_4_CPM', [256, 128, 3, 1, 1])
+                      ('conv4_4_CPM', [256, 128, 3, 1, 1])  # 最后输出128通道
                   ])
 
 
-        # Stage 1
-        block1_1 = OrderedDict([
-                        ('conv5_1_CPM_L1', [128, 128, 3, 1, 1]),
+        # Stage 1：初始预测
+        block1_1 = OrderedDict([    # PAF分支，输出38通道
+                        ('conv5_1_CPM_L1', [128, 128, 3, 1, 1]),    # 3×3卷积
                         ('conv5_2_CPM_L1', [128, 128, 3, 1, 1]),
                         ('conv5_3_CPM_L1', [128, 128, 3, 1, 1]),
-                        ('conv5_4_CPM_L1', [128, 512, 1, 1, 0]),
+                        ('conv5_4_CPM_L1', [128, 512, 1, 1, 0]),    # 1×1卷积
                         ('conv5_5_CPM_L1', [512, 38, 1, 1, 0])
                     ])
 
-        block1_2 = OrderedDict([
-                        ('conv5_1_CPM_L2', [128, 128, 3, 1, 1]),
+        block1_2 = OrderedDict([    # Heatmap分支，输出19通道
+                        ('conv5_1_CPM_L2', [128, 128, 3, 1, 1]),    # 3×3卷积
                         ('conv5_2_CPM_L2', [128, 128, 3, 1, 1]),
                         ('conv5_3_CPM_L2', [128, 128, 3, 1, 1]),
-                        ('conv5_4_CPM_L2', [128, 512, 1, 1, 0]),
+                        ('conv5_4_CPM_L2', [128, 512, 1, 1, 0]),    # 1×1卷积
                         ('conv5_5_CPM_L2', [512, 19, 1, 1, 0])
                     ])
         blocks['block1_1'] = block1_1
@@ -71,15 +73,15 @@ class bodypose_model(nn.Module):
 
         self.model0 = make_layers(block0, no_relu_layers)
 
-        # Stages 2 - 6
+        # Stages 2 - 6：细化阶段
         for i in range(2, 7):
             blocks['block%d_1' % i] = OrderedDict([
-                    ('Mconv1_stage%d_L1' % i, [185, 128, 7, 1, 3]),
-                    ('Mconv2_stage%d_L1' % i, [128, 128, 7, 1, 3]),
-                    ('Mconv3_stage%d_L1' % i, [128, 128, 7, 1, 3]),
-                    ('Mconv4_stage%d_L1' % i, [128, 128, 7, 1, 3]),
-                    ('Mconv5_stage%d_L1' % i, [128, 128, 7, 1, 3]),
-                    ('Mconv6_stage%d_L1' % i, [128, 128, 1, 1, 0]),
+                    ('Mconv1_stage%d_L1' % i, [185, 128, 7, 1, 3]), # 7×7卷积
+                    ('Mconv2_stage%d_L1' % i, [128, 128, 7, 1, 3]), # 7×7卷积
+                    ('Mconv3_stage%d_L1' % i, [128, 128, 7, 1, 3]), # 7×7卷积
+                    ('Mconv4_stage%d_L1' % i, [128, 128, 7, 1, 3]), # 7×7卷积
+                    ('Mconv5_stage%d_L1' % i, [128, 128, 7, 1, 3]), # 7×7卷积
+                    ('Mconv6_stage%d_L1' % i, [128, 128, 1, 1, 0]), # 1×1卷积
                     ('Mconv7_stage%d_L1' % i, [128, 38, 1, 1, 0])
                 ])
 

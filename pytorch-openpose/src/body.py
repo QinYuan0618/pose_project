@@ -1,3 +1,5 @@
+# 这是一个基于PyTorch实现的人体姿态估计模块，使用预训练的OpenPose模型来检测图像中的人体关键点
+# 用预训练模型对输入图像进行前向推理、生成热图（heatmap）和肢体连接图（PAF），然后解析出人体的18个关键点坐标和它们的连接关系
 import cv2
 import numpy as np
 import math
@@ -13,24 +15,32 @@ from src.model import bodypose_model
 
 class Body(object):
     def __init__(self, model_path):
-        self.model = bodypose_model()
+        # 步骤1：模型加载与结构初始化
+        # - 创建模型结构（bodypose_model）
+        # - 将模型转到 GPU（如果可用）
+        # - 从 model_path 加载预训练权重并应用到模型
+        # - 切换到 eval 模式用于推理
+        self.model = bodypose_model() # 加载模型结构，定义了OpenPose的六阶段卷积网络（stage1-6）
         if torch.cuda.is_available():
             self.model = self.model.cuda()
-        model_dict = util.transfer(self.model, torch.load(model_path))
+        # model_dict = util.transfer(self.model, torch.load(model_path))
+        model_dict = util.transfer(self.model, torch.load(model_path, weights_only=False))  # 加载权重：从 model_path（即 body_pose_model.pth）读取参数
         self.model.load_state_dict(model_dict)
         self.model.eval()
 
     def __call__(self, oriImg):
-        # scale_search = [0.5, 1.0, 1.5, 2.0]
-        scale_search = [0.5]
-        boxsize = 368
-        stride = 8
+        scale_search = [0.5, 1.0, 1.5, 2.0] # 增加检测尺度
+        # scale_search = [0.5]
+        boxsize = 368   # 模型输入尺寸
+        stride = 8      # 下采样步长
         padValue = 128
-        thre1 = 0.1
-        thre2 = 0.05
+        thre1 = 0.05  # 降低阈值（原来0.1）
+        thre2 = 0.03  # 降低阈值（原来0.05）
+        # OpenPose 是基于 多尺度检测 来提高精度
+        # 它会对图片缩放多次，分别推理，然后平均 heatmap 和 PAF
         multiplier = [x * boxsize / oriImg.shape[0] for x in scale_search]
-        heatmap_avg = np.zeros((oriImg.shape[0], oriImg.shape[1], 19))
-        paf_avg = np.zeros((oriImg.shape[0], oriImg.shape[1], 38))
+        heatmap_avg = np.zeros((oriImg.shape[0], oriImg.shape[1], 19))  # 存储18个关键点 + 1背景通道的平均概率图
+        paf_avg = np.zeros((oriImg.shape[0], oriImg.shape[1], 38))      # 存储38通道（19个肢体 × 2方向）的连接场
 
         for m in range(len(multiplier)):
             scale = multiplier[m]
@@ -61,7 +71,8 @@ class Body(object):
             paf = paf[:imageToTest_padded.shape[0] - pad[2], :imageToTest_padded.shape[1] - pad[3], :]
             paf = cv2.resize(paf, (oriImg.shape[1], oriImg.shape[0]), interpolation=cv2.INTER_CUBIC)
 
-            heatmap_avg += heatmap_avg + heatmap / len(multiplier)
+            # heatmap_avg += heatmap_avg + heatmap / len(multiplier)
+            heatmap_avg += heatmap / len(multiplier) # 修改原项目issue
             paf_avg += + paf / len(multiplier)
 
         all_peaks = []
@@ -90,6 +101,7 @@ class Body(object):
             all_peaks.append(peaks_with_score_and_id)
             peak_counter += len(peaks)
 
+        # 建立关键点连接
         # find connection in the specified sequence, center 29 is in the position 15
         limbSeq = [[2, 3], [2, 6], [3, 4], [4, 5], [6, 7], [7, 8], [2, 9], [9, 10], \
                    [10, 11], [2, 12], [12, 13], [13, 14], [2, 1], [1, 15], [15, 17], \
@@ -130,9 +142,15 @@ class Body(object):
                         score_midpts = np.multiply(vec_x, vec[0]) + np.multiply(vec_y, vec[1])
                         score_with_dist_prior = sum(score_midpts) / len(score_midpts) + min(
                             0.5 * oriImg.shape[0] / norm - 1, 0)
-                        criterion1 = len(np.nonzero(score_midpts > thre2)[0]) > 0.8 * len(score_midpts)
-                        criterion2 = score_with_dist_prior > 0
-                        if criterion1 and criterion2:
+                        criterion1 = len(np.nonzero(score_midpts > thre2)[0]) > 0.85 * len(score_midpts)  # 0.8改成0.85
+                        criterion2 = score_with_dist_prior > 0.2  # 0改成0.2
+                        # 新增距离约束：防止跨学生连接
+                        max_limb_length = oriImg.shape[0] * 0.25  # 肢体最大长度为图像高度的25%
+                        criterion3 = norm < max_limb_length
+
+                        # 综合判断
+                        if criterion1 and criterion2 and criterion3:
+                        # if criterion1 and criterion2:
                             connection_candidate.append(
                                 [i, j, score_with_dist_prior, score_with_dist_prior + candA[i][2] + candB[j][2]])
 
@@ -149,7 +167,8 @@ class Body(object):
             else:
                 special_k.append(k)
                 connection_all.append([])
-
+       
+        # 组成人体骨架
         # last number in each row is the total parts number of that person
         # the second last number in each row is the score of the overall configuration
         subset = -1 * np.ones((0, 20))
@@ -199,7 +218,7 @@ class Body(object):
         # delete some rows of subset which has few parts occur
         deleteIdx = []
         for i in range(len(subset)):
-            if subset[i][-1] < 4 or subset[i][-2] / subset[i][-1] < 0.4:
+            if subset[i][-1] < 5 or subset[i][-2] / subset[i][-1] < 0.45:  # 4改成5，0.4改成0.45
                 deleteIdx.append(i)
         subset = np.delete(subset, deleteIdx, axis=0)
 
@@ -213,6 +232,6 @@ if __name__ == "__main__":
     test_image = '../images/ski.jpg'
     oriImg = cv2.imread(test_image)  # B,G,R order
     candidate, subset = body_estimation(oriImg)
-    canvas = util.draw_bodypose(oriImg, candidate, subset)
+    canvas = util.draw_bodypose(oriImg, candidate, subset)  # 可视化结果
     plt.imshow(canvas[:, :, [2, 1, 0]])
     plt.show()

@@ -41,21 +41,26 @@ def transfer(model, model_weights):
 # draw the body keypoint and lims
 def draw_bodypose(canvas, candidate, subset):
     stickwidth = 4
-    limbSeq = [[2, 3], [2, 6], [3, 4], [4, 5], [6, 7], [7, 8], [2, 9], [9, 10], \
-               [10, 11], [2, 12], [12, 13], [13, 14], [2, 1], [1, 15], [15, 17], \
-               [1, 16], [16, 18], [3, 17], [6, 18]]
+    
+    # limbSeq = [[2, 3], [2, 6], [3, 4], [4, 5], [6, 7], [7, 8], [2, 9], [9, 10], \
+    #            [10, 11], [2, 12], [12, 13], [13, 14], [2, 1], [1, 15], [15, 17], \
+    #            [1, 16], [16, 18], [3, 17], [6, 18]]
+    # 由于坐姿识别教室场景的特殊性，只画出上半身的10个点和相关连接
+    limbSeq = [[2, 3], [2, 6], [3, 4], [4, 5], [6, 7], [7, 8], [2, 9], [2, 12], [2, 1]]
 
     colors = [[255, 0, 0], [255, 85, 0], [255, 170, 0], [255, 255, 0], [170, 255, 0], [85, 255, 0], [0, 255, 0], \
               [0, 255, 85], [0, 255, 170], [0, 255, 255], [0, 170, 255], [0, 85, 255], [0, 0, 255], [85, 0, 255], \
               [170, 0, 255], [255, 0, 255], [255, 0, 170], [255, 0, 85]]
-    for i in range(18):
+    # for i in range(18):
+    for i in [0, 1, 2, 3, 4, 5, 6, 7, 8, 11]:  # 只画上半身和髋部
         for n in range(len(subset)):
             index = int(subset[n][i])
             if index == -1:
                 continue
             x, y = candidate[index][0:2]
             cv2.circle(canvas, (int(x), int(y)), 4, colors[i], thickness=-1)
-    for i in range(17):
+    # for i in range(17):
+    for i in range(len(limbSeq)):
         for n in range(len(subset)):
             index = subset[n][np.array(limbSeq[i]) - 1]
             if -1 in index:
